@@ -1,0 +1,16 @@
+# Based on https://blog.container-solutions.com/running-docker-containers-with-systemd
+[Unit]
+Description=youtube-dl server
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+ExecStart=systemd-docker --cgroups name=systemd run --rm --name %n --publish 8080:8080 youtube-dl-server
+Restart=always
+RestartSec=10s
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
