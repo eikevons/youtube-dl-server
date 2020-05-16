@@ -5,7 +5,7 @@ from collections import ChainMap
 from itertools import chain
 from operator import itemgetter
 from queue import Queue
-from bottle import route, run, Bottle, request, static_file
+from bottle import route, run, Bottle, request, static_file, template
 from threading import Thread
 from pathlib import Path
 from ydl_server.logdb import JobsDB, Job, Actions
@@ -17,25 +17,33 @@ app = Bottle()
 
 @app.route(['/', '/index'])
 def front_index():
-    return static_file('templates/index.html', root='./ydl_server')
-
+    return template('./ydl_server/templates/index.html',
+            ydl_version=ydlhandler.get_ydl_version())
 
 @app.route('/logs')
 def front_logs():
-    return static_file('templates/logs.html', root='./ydl_server')
+    return template('./ydl_server/templates/logs.html',
+            ydl_version=ydlhandler.get_ydl_version())
 
 @app.route('/finished')
 def front_finished():
-    return static_file('templates/finished.html', root='./ydl_server')
+    return template('./ydl_server/templates/finished.html',
+            ydl_version=ydlhandler.get_ydl_version())
+
 
 @app.route('/api/finished')
 def api_list_finished():
     root_dir = Path(app_vars['YDL_OUTPUT_TEMPLATE']).parent
-    matches = chain(root_dir.glob('*'), root_dir.glob('*/*'))
-    files = [{
-        'name': f.relative_to(root_dir).as_posix(),
-        'modified': f.stat().st_mtime * 1000,
-            } for f in matches if not f.name.startswith('.') and f.is_file()]
+    matches = root_dir.glob('*')
+
+    files = [{'name': f1.name,
+            'modified': f1.stat().st_mtime * 1000,
+            'children': sorted([{
+                'name': f2.name,
+                'modified': f2.stat().st_mtime * 1000
+                } for f2 in f1.iterdir() if not f2.name.startswith('.')] if f1.is_dir() else [], key=itemgetter('modified'), reverse=True)
+            } for f1 in matches if not f1.name.startswith('.')]
+
     files = sorted(files, key=itemgetter('modified'), reverse=True)
     return {
         "success": True,
@@ -85,11 +93,15 @@ def api_queue_download():
     if not url:
         return {"success": False, "error": "'url' query parameter omitted"}
 
-    job = Job(url, 3, "", request.forms.get("format"))
+    job = Job(url, Job.PENDING, "", request.forms.get("format"))
     jobshandler.put((Actions.INSERT, job))
 
     print("Added url " + url + " to the download queue")
     return {"success": True, "url": url, "options": options}
+
+@app.route('/api/youtube-dl/version')
+def ydl_version():
+    return {'version': youtube_dl.version.__version__}
 
 @app.route("/youtube-dl/update", method="GET")
 def ydl_update():

@@ -24,6 +24,15 @@ function set_dismissible_message(success, message){
   $("#message_list").html(message_list);
 }
 
+function retry_download(url, format){
+  data = {url: url,format: format};
+  $.post("api/downloads", data)
+    .done(function (data) {
+      get_download_logs();
+      update_stats();
+    });
+}
+
 function submit_video(){
   data = {url: $("#url").val(),format: $("#format").val()};
   $.post("api/downloads", data)
@@ -76,7 +85,10 @@ function get_download_logs(){
       download_logs += "<td>" + row.last_update + "</td>";
       download_logs += "<td>" + row.name + "</td>";
       download_logs += "<td>" + row.format + "</td>";
-      download_logs += "<td> <span class='" + statusToTrClass[row.status] + "'>" + row.status + "</span></td>";
+      if (row.status == 'Failed')
+        download_logs += "<td> <a href=\"#\" onclick=\"retry_download('" + row.name + "','" + row.format + "')\" class='" + statusToTrClass[row.status] + "'>" + row.status + " / Retry</a></td>";
+      else
+        download_logs += "<td> <span class='" + statusToTrClass[row.status] + "'>" + row.status + "</span></td>";
       download_logs += "<td style='text-align: left;'>" + row.log.replace(/\n|\r/g, '<br/>') + "</td>";
       download_logs += "</tr>";
     });
@@ -93,7 +105,17 @@ function get_finished_files(){
     let finished_files = "";
     $.each(data.files, function(key, file) {
       finished_files += "<tr>";
-      finished_files += "<td><a href=\"api/finished/" + encodeURIComponent(file.name) + "\">" + file.name + "</a></td>";
+      if (file.children.length > 0) {
+        finished_files += "<td><a role=\"button\" href=\"#dir" + key + "\" data-toggle=\"collapse\" aria-expanded=\"false\" aria-controls=\"dir" + key + "\">" + file.name + "</a>";
+        finished_files += "<div class=\"collapse\" id=\"dir" + key + "\"><table class=\"col-md-16 table table-stripped table-md table-dark text-left\">";
+        $.each(file.children, function(child_key, child_file) {
+          finished_files += "<tr><td><a href=\"api/finished/" + encodeURIComponent(file.name + "/" + child_file.name)+ "\" >" + child_file.name + "</a></td><td>" + (new Date(child_file.modified)).toISOString() + "</td></tr>";
+        });
+        finished_files += "</table></div></td>";
+      }
+      else {
+        finished_files += "<td><a href=\"api/finished/" + encodeURIComponent(file.name) + "\">" + file.name + "</a></td>";
+      }
       finished_files += "<td>" + (new Date(file.modified)).toISOString() + "</td>";
       finished_files += "</tr>";
     });
